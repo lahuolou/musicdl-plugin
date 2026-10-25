@@ -133,6 +133,8 @@
   }
   .login-bar .tip { font-size: 12px; color: var(--text2); }
   .login-status { font-size: 12px; color: var(--success); }
+  .update-status { font-size: 12px; color: var(--text2); }
+  .update-status.has-update { color: var(--danger); }
   .modal {
     position: fixed;
     inset: 0;
@@ -185,6 +187,9 @@
   <button id="loginBtn">扫码登录</button>
   <span id="loginStatus" class="login-status"></span>
   <span class="tip">登录后自动保存 Cookie，可下载无损 / VIP 曲目</span>
+  <span style="flex:1"></span>
+  <span id="pluginVer" class="update-status">v1.1.0</span>
+  <button id="updateBtn" style="padding:5px 10px;font-size:12px;">检查更新</button>
 </div>
 
 <div id="status" class="status" style="padding:24px 12px;text-align:center;color:var(--text2);background:var(--card);border:1px solid var(--border);border-radius:var(--radius);">输入关键词开始搜索</div>
@@ -502,6 +507,44 @@ $('loginBtn').onclick = openLogin;
 $('qrCloseBtn').onclick = closeLogin;
 $('loginModal').addEventListener('click', e => { if (e.target === $('loginModal')) closeLogin(); });
 refreshLoginStatus();
+
+// ============================================================
+// 更新检测
+// ============================================================
+
+async function checkUpdate() {
+  const btn = $('updateBtn');
+  const st = $('pluginVer');
+  btn.disabled = true;
+  st.textContent = '检查中...';
+  st.className = 'update-status';
+  try {
+    const r = await callPlugin({ op: 'check_update' }, 20000);
+    if (!r.ok) throw new Error(r.error || '检查失败');
+    const d = r.data;
+    st.textContent = 'v' + d.current;
+    if (d.status === 'fail') {
+      st.textContent += ' · 检查失败（仓库私有或无网络）';
+      toast('无法检查更新：仓库为私有或无网络，可访问 Release 页面手动查看');
+      return;
+    }
+    if (d.has_update) {
+      st.textContent += ' · 发现新版本 v' + d.latest;
+      st.className = 'update-status has-update';
+      toast('发现新版本 v' + d.latest + '，打开 Release 页下载新 ZIP 后，在宿主「插件管理」重新导入即完成升级（保留已配置 Cookie）');
+      if (d.url) setTimeout(() => window.open(d.url, '_blank'), 600);
+    } else {
+      st.textContent += ' · 已是最新版本';
+    }
+  } catch (e) {
+    st.textContent = 'v1.1.0 · 检查失败';
+    toast('检查更新失败: ' + e.message);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+$('updateBtn').onclick = checkUpdate;
 
 $('searchBtn').onclick = doSearch;
 $('kw').addEventListener('keydown', e => { if (e.key === 'Enter') doSearch(); });

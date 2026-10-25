@@ -11,6 +11,7 @@
 - **自定义下载目录**：可手动指定输出目录，留空自动读取宿主默认音乐目录
 - **扫码登录自动获取 Cookie**：网易云 / QQ / 酷狗 / B站 手机扫码即登录，Cookie 自动保存到配置
 - **可配置 Cookie**：各平台 Cookie 可选填写，用于下载无损 / VIP 等受限歌曲
+- **更新检测**：面板内置「检查更新」，对比 GitHub Release 最新版本，发现新版提示一键跳转下载
 
 ## 目录结构
 
@@ -69,6 +70,12 @@ ZIP 包内应包含 `plugin.json`（插件清单）、`bin/`（三平台可执�
 3. 登录成功后 Cookie 自动保存到插件配置，面板搜索 / 下载即自动携带
 4. 面板会显示当前已登录的平台；下载无损（FLAC）需该账号为对应平台 VIP/会员
 
+### 检查更新
+
+1. 点击面板右上角「检查更新」，插件通过 GitHub Releases API 对比最新版本
+2. 有新版本时自动打开 Release 页面
+3. 下载新 ZIP 后在宿主「插件管理」重新导入（覆盖导入）即完成升级，已配置的 Cookie 保留
+
 ## 接口约定
 
 面板通过 `POST /api/plugins/musicdl.downloader/run` 调用插件，请求需携带请求头 `X-Requested-With: Lnh-Music-Tag`。
@@ -80,6 +87,7 @@ ZIP 包内应包含 `plugin.json`（插件清单）、`bin/`（三平台可执�
 | 下载 | `{"op": "download", "song": {...}, "out_dir": "D:/Music", "with_cover": true, "with_lyrics": true}` | 下载歌曲（含封面/歌词） |
 | 创建扫码登录 | `{"op": "login_create", "source": "netease"}` | 返回二维码（base64 PNG）与 key |
 | 轮询登录状态 | `{"op": "login_poll", "source": "netease", "key": "..."}` | 返回状态；success 时含 cookie |
+| 检查更新 | `{"op": "check_update"}` | 返回 current / latest / has_update / url |
 
 单源搜索的 `source` 可选值：`netease`（网易云）、`qq`（QQ 音乐）、`kugou`（酷狗）、`kuwo`（酷我）、`migu`（咪咕）、`soda`（汽水）、`bilibili`（B 站）。
 
@@ -89,7 +97,7 @@ ZIP 包内应包含 `plugin.json`（插件清单）、`bin/`（三平台可执�
 
 | 版本 | 说明 |
 | --- | --- |
-| v1.1.0 | 新增扫码登录（网易云/QQ/酷狗/B站），Cookie 自动保存；面板调用自动携带已配置 Cookie，解锁无损下载 |
+| v1.1.0 | 新增扫码登录（网易云/QQ/酷狗/B站）自动获取 Cookie、面板调用自动携带已配置 Cookie、内置更新检测（对齐宿主多源版本检查机制） |
 | v1.0.0 | 初始发布：多平台聚合搜索与下载、内置 Web UI、三平台支持、多平台 Cookie 配置 |
 
 ## 免责声明
