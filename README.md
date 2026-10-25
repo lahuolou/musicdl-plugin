@@ -9,7 +9,8 @@
 - **三平台支持**：Windows / macOS / Linux 一套插件全部覆盖
 - **可视化面板**：内置 Web UI，搜索、下载一键操作，明暗主题自适应
 - **自定义下载目录**：可手动指定输出目录，留空自动读取宿主默认音乐目录
-- **可配置 Cookie**：各平台 Cookie 可选填写，用于下载 VIP 等受限歌曲
+- **扫码登录自动获取 Cookie**：网易云 / QQ / 酷狗 / B站 手机扫码即登录，Cookie 自动保存到配置
+- **可配置 Cookie**：各平台 Cookie 可选填写，用于下载无损 / VIP 等受限歌曲
 
 ## 目录结构
 
@@ -47,11 +48,12 @@ ZIP 包内应包含 `plugin.json`（插件清单）、`bin/`（三平台可执�
 | 字段 | 说明 | 必填 |
 | --- | --- | --- |
 | `default_dir` | 默认下载目录，留空则自动读取宿主默认音乐目录 | 否 |
-| `netease_cookie` | 网易云 Cookie，下载 VIP 歌曲时填写 | 否 |
-| `qq_cookie` | QQ 音乐 Cookie | 否 |
-| `kugou_cookie` | 酷狗 Cookie | 否 |
+| `netease_cookie` | 网易云 Cookie，下载无损 / VIP 歌曲时填写；可在面板扫码登录自动获取 | 否 |
+| `qq_cookie` | QQ 音乐 Cookie；可在面板扫码登录自动获取 | 否 |
+| `kugou_cookie` | 酷狗 Cookie；可在面板扫码登录自动获取 | 否 |
 | `kuwo_cookie` | 酷我 Cookie | 否 |
 | `migu_cookie` | 咪咕 Cookie | 否 |
+| `bilibili_cookie` | B 站 Cookie；可在面板扫码登录自动获取 | 否 |
 
 ## 使用方法
 
@@ -59,6 +61,13 @@ ZIP 包内应包含 `plugin.json`（插件清单）、`bin/`（三平台可执�
 2. 输入歌名 / 歌手，回车或点击「搜索」
 3. 在结果列表中点击「下载」，默认自动保存封面与歌词
 4. 下载目录留空时使用宿主默认音乐目录
+
+### 扫码登录（获取无损 / VIP 下载权限）
+
+1. 在面板上方选择平台（网易云 / QQ音乐 / 酷狗 / B站），点击「扫码登录」
+2. 用对应平台的手机 App 扫描二维码并确认登录
+3. 登录成功后 Cookie 自动保存到插件配置，面板搜索 / 下载即自动携带
+4. 面板会显示当前已登录的平台；下载无损（FLAC）需该账号为对应平台 VIP/会员
 
 ## 接口约定
 
@@ -69,13 +78,18 @@ ZIP 包内应包含 `plugin.json`（插件清单）、`bin/`（三平台可执�
 | 综合搜索 | `{"op": "search_all", "keyword": "周杰伦"}` | 聚合多源搜索结果 |
 | 单源搜索 | `{"op": "search", "source": "netease", "keyword": "周杰伦"}` | 指定平台搜索 |
 | 下载 | `{"op": "download", "song": {...}, "out_dir": "D:/Music", "with_cover": true, "with_lyrics": true}` | 下载歌曲（含封面/歌词） |
+| 创建扫码登录 | `{"op": "login_create", "source": "netease"}` | 返回二维码（base64 PNG）与 key |
+| 轮询登录状态 | `{"op": "login_poll", "source": "netease", "key": "..."}` | 返回状态；success 时含 cookie |
 
 单源搜索的 `source` 可选值：`netease`（网易云）、`qq`（QQ 音乐）、`kugou`（酷狗）、`kuwo`（酷我）、`migu`（咪咕）、`soda`（汽水）、`bilibili`（B 站）。
+
+扫码登录的 `source` 支持：`netease`、`qq`、`kugou`、`bilibili`（music-lib 提供扫码能力）。
 
 ## 版本历史
 
 | 版本 | 说明 |
 | --- | --- |
+| v1.1.0 | 新增扫码登录（网易云/QQ/酷狗/B站），Cookie 自动保存；面板调用自动携带已配置 Cookie，解锁无损下载 |
 | v1.0.0 | 初始发布：多平台聚合搜索与下载、内置 Web UI、三平台支持、多平台 Cookie 配置 |
 
 ## 免责声明

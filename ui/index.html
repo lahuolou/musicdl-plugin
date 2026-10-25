@@ -41,7 +41,7 @@
   .toolbar {
     display: flex;
     gap: 8px;
-    margin-bottom: 8px;
+    margin-bottom: 12px;
     flex-wrap: wrap;
     align-items: center;
   }
@@ -55,9 +55,7 @@
   }
   select:focus, input[type=text]:focus { border-color: var(--primary); }
   #kw { flex: 1; min-width: 200px; }
-  #outdir { flex: 1; min-width: 200px; }
-  .dir-row { display:flex; gap:8px; align-items:center; margin-bottom:12px; }
-  .dir-row label { font-size:12px; color:var(--text2); white-space:nowrap; }
+  #outdir { width: 240px; }
   button {
     background: var(--primary);
     color: #fff;
@@ -74,7 +72,6 @@
     border: 1px solid var(--border);
     border-radius: var(--radius);
     overflow: hidden;
-    margin-top: 12px;
   }
   .item {
     display: flex;
@@ -100,11 +97,7 @@
     padding: 24px 12px;
     text-align: center;
     color: var(--text2);
-    background: var(--card);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
   }
-  .status.err { color: var(--danger); }
   .toast {
     position: fixed;
     bottom: 20px;
@@ -131,6 +124,38 @@
   .badge.flac { background: rgba(52,199,89,0.15); color: var(--success); }
   .badge.hi { background: rgba(255,149,0,0.15); color: #ff9500; }
   .badge.std { background: rgba(142,142,147,0.15); color: var(--text2); }
+  .login-bar {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 12px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  .login-bar .tip { font-size: 12px; color: var(--text2); }
+  .login-status { font-size: 12px; color: var(--success); }
+  .modal {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.45);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 200;
+  }
+  .modal-box {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px 24px;
+    text-align: center;
+    max-width: 340px;
+    width: 90%;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+  }
+  .modal-box h3 { margin-bottom: 12px; font-size: 16px; }
+  .modal-box img { width: 220px; height: 220px; border-radius: 8px; background: #fff; display: block; margin: 0 auto 12px; }
+  .qr-hint { color: var(--text2); font-size: 13px; min-height: 20px; margin-bottom: 12px; }
+  .modal-box button { margin-top: 4px; }
 </style>
 </head>
 <body>
@@ -150,13 +175,29 @@
   <button id="searchBtn">搜索</button>
 </div>
 
-<div class="dir-row">
-  <label for="outdir">下载目录</label>
-  <input type="text" id="outdir" placeholder="留空则使用宿主默认音乐目录" />
+<div class="login-bar">
+  <select id="loginSource">
+    <option value="netease">网易云</option>
+    <option value="qq">QQ音乐</option>
+    <option value="kugou">酷狗</option>
+    <option value="bilibili">B站</option>
+  </select>
+  <button id="loginBtn">扫码登录</button>
+  <span id="loginStatus" class="login-status"></span>
+  <span class="tip">登录后自动保存 Cookie，可下载无损 / VIP 曲目</span>
 </div>
 
-<div id="status" class="status">输入关键词开始搜索</div>
-<div class="result" id="resultBox"></div>
+<div id="status" class="status" style="padding:24px 12px;text-align:center;color:var(--text2);background:var(--card);border:1px solid var(--border);border-radius:var(--radius);">输入关键词开始搜索</div>
+<div class="result" style="margin-top:12px;"></div>
+
+<div class="modal" id="loginModal">
+  <div class="modal-box">
+    <h3 id="loginModalTitle">扫码登录</h3>
+    <img id="qrImg" alt="二维码">
+    <div id="qrHint" class="qr-hint">正在生成二维码...</div>
+    <button id="qrCloseBtn">关闭</button>
+  </div>
+</div>
 
 <div class="toast" id="toast"></div>
 
@@ -164,34 +205,54 @@
 const PLUGIN = '/api/plugins/musicdl.downloader/run';
 const $ = id => document.getElementById(id);
 
+// Cookie 字段映射：平台 -> 插件配置字段名（与 plugin.json fields 对应）
+const COOKIE_FIELD = {
+  netease: 'netease_cookie', qq: 'qq_cookie', kugou: 'kugou_cookie',
+  kuwo: 'kuwo_cookie', migu: 'migu_cookie', bilibili: 'bilibili_cookie'
+};
+// 支持扫码登录的平台
+const LOGIN_SUPPORTED = ['netease', 'qq', 'kugou', 'bilibili'];
+
+// 读取宿主已保存的本插件配置，组装 cookies map（每次调用前取最新值）
+async function pluginCookies() {
+  const cookies = {};
+  try {
+    const r = await fetch('/api/plugins', { headers: { 'X-Requested-With': 'LNH-MusicTag' } });
+    if (!r.ok) return cookies;
+    const j = await r.json();
+    const list = (j.plugins || []).filter(p => p.name === 'musicdl.downloader');
+    if (!list.length) return cookies;
+    const cfg = list[0].config || {};
+    for (const src of Object.keys(COOKIE_FIELD)) {
+      const v = cfg[COOKIE_FIELD[src]];
+      if (v && v.trim()) cookies[src] = v.trim();
+    }
+  } catch (e) {}
+  return cookies;
+}
+
 async function callPlugin(body, timeoutMs) {
+  // 登录类操作无需 Cookie；其余操作自动携带已配置的 Cookie
+  const op = body.op;
+  if (!['login_create', 'login_poll', 'list_sources'].includes(op)) {
+    body.cookies = await pluginCookies();
+  }
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), timeoutMs || 30000);
-  let resp;
   try {
-    resp = await fetch(PLUGIN, {
+    const resp = await fetch(PLUGIN, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'X-Requested-With': 'Lnh-Music-Tag'
+        'X-Requested-With': 'LNH-MusicTag'
       },
       body: JSON.stringify(body),
       signal: ctrl.signal
     });
-  } catch (e) {
+    return resp.json();
+  } finally {
     clearTimeout(timer);
-    throw new Error(e.name === 'AbortError' ? '请求超时，请重试' : ('网络请求失败: ' + e.message));
   }
-  clearTimeout(timer);
-  let data = null;
-  try { data = await resp.json(); } catch (e) { /* 非 JSON */ }
-  if (!resp.ok) {
-    throw new Error((data && data.error) || ('HTTP ' + resp.status));
-  }
-  if (data && data.ok === false) {
-    throw new Error(data.error || '操作失败');
-  }
-  return data;
 }
 
 function toast(msg) {
@@ -203,10 +264,11 @@ function toast(msg) {
 
 function fmtDur(s) {
   if (!s) return '';
-  const m = Math.floor(s / 60), sec = s % 60;
-  return String(m).padStart(2, '0') + ':' + String(sec).padStart(2, '0');
+  const m = Math.floor(s/60), sec = s%60;
+  return String(m).padStart(2,'0') + ':' + String(sec).padStart(2,'0');
 }
 
+// 根据码率判断音质标签
 function qualityBadge(song) {
   const br = song.bitrate || 0;
   const ext = (song.ext || '').toLowerCase();
@@ -217,6 +279,7 @@ function qualityBadge(song) {
   return '<span class="badge std">标准</span>';
 }
 
+// 来源中文名映射
 const SOURCE_LABEL = {
   netease: '网易云', qq: 'QQ音乐', kugou: '酷狗', kuwo: '酷我',
   migu: '咪咕', qianqian: '千千', soda: '汽水', fivesing: '5sing',
@@ -224,41 +287,35 @@ const SOURCE_LABEL = {
 };
 function sourceLabel(s) { return SOURCE_LABEL[s] || s; }
 
-function setStatus(msg, isErr) {
-  const st = $('status');
-  st.style.display = 'block';
-  st.className = 'status' + (isErr ? ' err' : '');
-  st.textContent = msg;
-}
-
 async function doSearch() {
   const kw = $('kw').value.trim();
-  if (!kw) { setStatus('请输入关键词'); return; }
+  if (!kw) return;
   $('searchBtn').disabled = true;
-  setStatus('搜索中（综合多源）...');
+  const st = $('status');
+  st.style.display = 'block';
+  st.textContent = '搜索中（综合多源）...';
   try {
     const src = $('source').value;
     const body = src === 'all'
       ? { op: 'search_all', keyword: kw }
       : { op: 'search', source: src, keyword: kw };
     const r = await callPlugin(body, 20000);
-    const songs = (r.data && r.data.songs) || [];
-    if (!songs.length) {
-      setStatus('未找到结果');
-      $('resultBox').innerHTML = '';
-      return;
-    }
-    $('status').style.display = 'none';
-    renderSongs(songs);
+    if (!r.ok) throw new Error(r.error || '搜索失败');
+    st.style.display = 'none';
+    renderSongs(r.data.songs || []);
   } catch (e) {
-    setStatus('错误: ' + e.message, true);
+    st.textContent = '错误: ' + e.message;
   } finally {
     $('searchBtn').disabled = false;
   }
 }
 
 function renderSongs(songs) {
-  const box = $('resultBox');
+  const box = document.querySelector('.result');
+  if (!songs.length) {
+    box.innerHTML = '<div class="status">未找到结果</div>';
+    return;
+  }
   box.innerHTML = songs.map((s, i) => `
     <div class="item">
       <img class="cover" src="${escapeHtml(s.cover || '')}" loading="lazy" onerror="this.style.visibility='hidden'">
@@ -286,12 +343,13 @@ async function doDownload(song, btn) {
     const r = await callPlugin({
       op: 'download',
       song: song,
-      out_dir: $('outdir').value.trim() || undefined,
+      out_dir: downloadDir,
       with_cover: true,
       with_lyrics: true
     }, 120000);
+    if (!r.ok) throw new Error(r.error || '下载失败');
     btn.textContent = '完成';
-    toast('已下载: ' + ((r.data && r.data.filename) || '完成'));
+    toast('已下载: ' + r.data.filename);
     setTimeout(() => { btn.textContent = '下载'; btn.disabled = false; }, 1500);
   } catch (e) {
     btn.textContent = '失败';
@@ -301,21 +359,149 @@ async function doDownload(song, btn) {
 }
 
 function escapeHtml(s) {
-  return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  return String(s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 
-// 启动时从宿主设置读取默认音乐目录，填入可编辑输入框（GET，无需 CSRF 头）。
+// 下载目录（自动探测，不显示输入框）
+let downloadDir = 'downloads';
+
+// 递归在对象里找可能的音乐目录字段
+function findMusicDir(obj, depth) {
+  if (!obj || typeof obj !== 'object' || depth > 4) return null;
+  const keys = ['music_dir','musicDir','music_path','musicPath','download_dir','downloadDir','default_dir','defaultDir','library_dir','libraryDir','music_folder','musicFolder','audio_dir','audioDir'];
+  for (const k of keys) {
+    if (typeof obj[k] === 'string' && obj[k].trim()) return obj[k].trim();
+  }
+  for (const k in obj) {
+    const v = obj[k];
+    if (v && typeof v === 'object') {
+      const r = findMusicDir(v, depth+1);
+      if (r) return r;
+    }
+  }
+  return null;
+}
+
+// 启动时自动探测宿主默认音乐目录
 async function autodetectDir() {
-  try {
-    const r = await fetch('/api/settings', { headers: { 'X-Requested-With': 'Lnh-Music-Tag' } });
-    if (!r.ok) return;
-    const j = await r.json();
-    const dir = j.scanDir || j.music_dir || j.download_dir || '';
-    if (dir && !$('outdir').value) $('outdir').value = dir;
-  } catch (e) { /* 取不到则留空，由插件使用默认目录 */ }
+  const qs = new URLSearchParams(location.search);
+  for (const k of ['dir','music_dir','download_dir','default_dir']) {
+    if (qs.get(k)) { downloadDir = qs.get(k); return; }
+  }
+  const endpoints = ['/api/settings','/api/config','/api/app/settings','/api/options','/api/plugin-config'];
+  for (const ep of endpoints) {
+    try {
+      const r = await fetch(ep, { headers: { 'X-Requested-With': 'LNH-MusicTag' } });
+      if (!r.ok) continue;
+      const j = await r.json();
+      const dir = findMusicDir(j, 0);
+      if (dir) { downloadDir = dir; return; }
+    } catch (e) {}
+  }
 }
 
 autodetectDir();
+
+// ============================================================
+// 扫码登录（自动获取各平台 Cookie）
+// ============================================================
+
+let loginTimer = null;
+let loginSource = '';
+
+function setQrHint(msg) { $('qrHint').textContent = msg; }
+
+function closeLogin() {
+  clearInterval(loginTimer);
+  loginTimer = null;
+  $('loginModal').style.display = 'none';
+}
+
+function openLogin() {
+  loginSource = $('loginSource').value;
+  if (!LOGIN_SUPPORTED.includes(loginSource)) {
+    toast('该平台暂不支持扫码登录');
+    return;
+  }
+  clearInterval(loginTimer);
+  $('loginModalTitle').textContent = '扫码登录 · ' + sourceLabel(loginSource);
+  $('qrImg').src = '';
+  setQrHint('正在生成二维码...');
+  $('loginModal').style.display = 'flex';
+  callPlugin({ op: 'login_create', source: loginSource }, 15000).then(async r => {
+    if (!r.ok) throw new Error(r.error || '创建二维码失败');
+    const d = r.data;
+    if (!d.qr_png_base64) throw new Error('插件未返回二维码图片');
+    $('qrImg').src = 'data:image/png;base64,' + d.qr_png_base64;
+    setQrHint('请用' + sourceLabel(loginSource) + '手机App扫码' + (d.expires_at ? '（5分钟内有效）' : ''));
+    startLoginPoll(d.source, d.key);
+  }).catch(e => {
+    setQrHint('错误: ' + e.message);
+  });
+}
+
+function startLoginPoll(source, key) {
+  loginTimer = setInterval(async () => {
+    try {
+      const r = await callPlugin({ op: 'login_poll', source, key }, 15000);
+      if (!r.ok) throw new Error(r.error || '查询状态失败');
+      const d = r.data;
+      const st = d.status;
+      if (st === 'success') {
+        clearInterval(loginTimer);
+        loginTimer = null;
+        setQrHint('登录成功，正在保存 Cookie...');
+        await saveCookie(source, d.cookie);
+        setQrHint('登录成功！' + sourceLabel(source) + ' Cookie 已保存，可关闭窗口');
+        toast('已自动保存 ' + sourceLabel(source) + ' Cookie');
+        refreshLoginStatus();
+        setTimeout(closeLogin, 1500);
+      } else if (st === 'expired') {
+        clearInterval(loginTimer);
+        loginTimer = null;
+        setQrHint('二维码已过期，请关闭后重新扫码');
+      } else if (st === 'scanned') {
+        setQrHint('已扫码，请在手机上确认登录');
+      } else {
+        setQrHint('等待扫码...' + (d.message ? '（' + d.message + '）' : ''));
+      }
+    } catch (e) {
+      clearInterval(loginTimer);
+      loginTimer = null;
+      setQrHint('轮询失败: ' + e.message);
+    }
+  }, 2500);
+}
+
+// 登录成功后把 Cookie 写入宿主插件配置（POST /api/plugins）
+async function saveCookie(source, cookie) {
+  if (!cookie) throw new Error('登录成功但未获取到 Cookie');
+  const field = COOKIE_FIELD[source];
+  if (!field) throw new Error('未知平台: ' + source);
+  const body = { 'musicdl.downloader': { config: { [field]: cookie } } };
+  const r = await fetch('/api/plugins', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'LNH-MusicTag' },
+    body: JSON.stringify(body)
+  });
+  if (!r.ok) throw new Error('保存配置失败 HTTP ' + r.status);
+}
+
+// 显示已登录平台
+async function refreshLoginStatus() {
+  try {
+    const cookies = await pluginCookies();
+    const logged = Object.keys(COOKIE_FIELD).filter(src => cookies[src]);
+    $('loginStatus').textContent = logged.length
+      ? '已登录: ' + logged.map(s => sourceLabel(s)).join('、')
+      : '未登录（无损下载需登录）';
+  } catch (e) {}
+}
+
+$('loginBtn').onclick = openLogin;
+$('qrCloseBtn').onclick = closeLogin;
+$('loginModal').addEventListener('click', e => { if (e.target === $('loginModal')) closeLogin(); });
+refreshLoginStatus();
 
 $('searchBtn').onclick = doSearch;
 $('kw').addEventListener('keydown', e => { if (e.key === 'Enter') doSearch(); });
