@@ -1,6 +1,6 @@
 # musicdl-plugin
 
-聚合多平台音乐搜索与下载插件（下载器）。支持网易云 / QQ 音乐 / 酷狗 / 酷我 / 咪咕 / 汽水 / Bilibili 等多平台的音乐搜索与下载，内置可视化控制面板，Windows / macOS / Linux 三平台可用。
+适用于 **Lnh-Music-Tag** 应用的聚合多平台音乐搜索与下载插件（下载器）。支持网易云 / QQ 音乐 / 酷狗 / 酷我 / 咪咕 / 汽水 / Bilibili 等多平台的音乐搜索与下载，内置可视化控制面板，Windows / macOS / Linux 三平台可用。
 
 ## 功能特性
 
@@ -28,7 +28,7 @@ musicdl-plugin-optimized/
 
 ## 安装与接入
 
-将整个项目目录放入宿主的插件目录，宿主读取 `plugin.json` 后即注册为「下载器」工具插件。
+本插件适用于 **Lnh-Music-Tag** 应用。将整个项目目录放入 Lnh-Music-Tag 的插件目录（如 `plugins/`），应用读取 `plugin.json` 后即注册为「下载器」工具插件。
 
 - **Windows**：入口为 `bin/run.cmd`，调用 `musicdl-plugin-windows.exe`
 - **macOS**：入口为 `bin/run.sh`，自动调用 `musicdl-plugin-darwin`
