@@ -28,7 +28,13 @@ musicdl-plugin-optimized/
 
 ## 安装与接入
 
-本插件适用于 **Lnh-Music-Tag** 应用。将整个项目目录放入 Lnh-Music-Tag 的插件目录（如 `plugins/`），应用读取 `plugin.json` 后即注册为「下载器」工具插件。
+本插件适用于 **Lnh-Music-Tag** 应用，通过后台导入 ZIP 插件包安装：
+
+1. 登录 **Lnh-Music-Tag** 后台
+2. 进入「插件管理」
+3. 选择「导入 ZIP 插件」，上传插件 ZIP 包
+
+ZIP 包内应包含 `plugin.json`（插件清单）、`bin/`（三平台可执行文件与启动脚本）、`ui/`（Web 控制面板），应用读取 `plugin.json` 后即注册为「下载器」工具插件：
 
 - **Windows**：入口为 `bin/run.cmd`，调用 `musicdl-plugin-windows.exe`
 - **macOS**：入口为 `bin/run.sh`，自动调用 `musicdl-plugin-darwin`
