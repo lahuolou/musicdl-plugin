@@ -2,7 +2,7 @@
   "name": "musicdl.downloader",
   "label": "下载器",
   "kind": "tool",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "hint": "聚合多平台音乐搜索与下载（网易云/QQ/酷狗/酷我/咪咕等），支持扫码登录自动获取 Cookie",
   "entries": {
     "windows": "bin/run.cmd",

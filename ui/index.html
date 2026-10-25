@@ -179,16 +179,18 @@
 
 <div class="login-bar">
   <select id="loginSource">
-    <option value="netease">网易云</option>
-    <option value="qq">QQ音乐</option>
-    <option value="kugou">酷狗</option>
-    <option value="bilibili">B站</option>
+    <option value="netease">网易云（扫码）</option>
+    <option value="qq_wx">QQ音乐·微信扫码</option>
+    <option value="qq">QQ音乐·QQ扫码</option>
+    <option value="qq_music">QQ音乐·QQ音乐App扫码</option>
+    <option value="kugou">酷狗（扫码）</option>
+    <option value="bilibili">B站（扫码）</option>
   </select>
   <button id="loginBtn">扫码登录</button>
   <span id="loginStatus" class="login-status"></span>
   <span class="tip">登录后自动保存 Cookie，可下载无损 / VIP 曲目</span>
   <span style="flex:1"></span>
-  <span id="pluginVer" class="update-status">v1.1.0</span>
+  <span id="pluginVer" class="update-status">v1.1.1</span>
   <button id="updateBtn" style="padding:5px 10px;font-size:12px;">检查更新</button>
 </div>
 
@@ -212,11 +214,11 @@ const $ = id => document.getElementById(id);
 
 // Cookie 字段映射：平台 -> 插件配置字段名（与 plugin.json fields 对应）
 const COOKIE_FIELD = {
-  netease: 'netease_cookie', qq: 'qq_cookie', kugou: 'kugou_cookie',
-  kuwo: 'kuwo_cookie', migu: 'migu_cookie', bilibili: 'bilibili_cookie'
+  netease: 'netease_cookie', qq: 'qq_cookie', qq_wx: 'qq_cookie', qq_music: 'qq_cookie',
+  kugou: 'kugou_cookie', kuwo: 'kuwo_cookie', migu: 'migu_cookie', bilibili: 'bilibili_cookie'
 };
 // 支持扫码登录的平台
-const LOGIN_SUPPORTED = ['netease', 'qq', 'kugou', 'bilibili'];
+const LOGIN_SUPPORTED = ['netease', 'qq', 'qq_wx', 'qq_music', 'kugou', 'bilibili'];
 
 // 读取宿主已保存的本插件配置，组装 cookies map（每次调用前取最新值）
 async function pluginCookies() {
@@ -286,9 +288,9 @@ function qualityBadge(song) {
 
 // 来源中文名映射
 const SOURCE_LABEL = {
-  netease: '网易云', qq: 'QQ音乐', kugou: '酷狗', kuwo: '酷我',
-  migu: '咪咕', qianqian: '千千', soda: '汽水', fivesing: '5sing',
-  jamendo: 'Jamendo', joox: 'JOOX', bilibili: 'B站', apple: 'Apple'
+  netease: '网易云', qq: 'QQ音乐', qq_wx: 'QQ音乐微信', qq_music: 'QQ音乐',
+  kugou: '酷狗', kuwo: '酷我', migu: '咪咕', qianqian: '千千', soda: '汽水',
+  fivesing: '5sing', jamendo: 'Jamendo', joox: 'JOOX', bilibili: 'B站', apple: 'Apple'
 };
 function sourceLabel(s) { return SOURCE_LABEL[s] || s; }
 
@@ -422,6 +424,16 @@ function closeLogin() {
   $('loginModal').style.display = 'none';
 }
 
+// 各登录方式的扫码提示语
+function loginHint(source) {
+  switch (source) {
+    case 'qq_wx': return '请用微信扫码';
+    case 'qq': return '请用 QQ App 扫码';
+    case 'qq_music': return '请用 QQ音乐 App 扫码';
+    default: return '请用' + sourceLabel(source) + '手机App扫码';
+  }
+}
+
 function openLogin() {
   loginSource = $('loginSource').value;
   if (!LOGIN_SUPPORTED.includes(loginSource)) {
@@ -436,9 +448,11 @@ function openLogin() {
   callPlugin({ op: 'login_create', source: loginSource }, 15000).then(async r => {
     if (!r.ok) throw new Error(r.error || '创建二维码失败');
     const d = r.data;
-    if (!d.qr_png_base64) throw new Error('插件未返回二维码图片');
-    $('qrImg').src = 'data:image/png;base64,' + d.qr_png_base64;
-    setQrHint('请用' + sourceLabel(loginSource) + '手机App扫码' + (d.expires_at ? '（5分钟内有效）' : ''));
+    // 优先用平台直返的二维码图片，否则用插件生成的 PNG
+    const imgSrc = d.image_url || (d.qr_png_base64 ? 'data:image/png;base64,' + d.qr_png_base64 : '');
+    if (!imgSrc) throw new Error('插件未返回二维码图片');
+    $('qrImg').src = imgSrc;
+    setQrHint(loginHint(d.source) + (d.expires_at ? '（二维码约 ' + Math.max(1, Math.round((d.expires_at - Date.now()/1000) / 60)) + ' 分钟有效）' : ''));
     startLoginPoll(d.source, d.key);
   }).catch(e => {
     setQrHint('错误: ' + e.message);
@@ -537,7 +551,7 @@ async function checkUpdate() {
       st.textContent += ' · 已是最新版本';
     }
   } catch (e) {
-    st.textContent = 'v1.1.0 · 检查失败';
+    st.textContent = 'v1.1.1 · 检查失败';
     toast('检查更新失败: ' + e.message);
   } finally {
     btn.disabled = false;
